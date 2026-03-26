@@ -76,10 +76,17 @@ window.addEventListener('message', (event) => {
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
 
   const docDef = markdownToDocDef(filename, markdown);
-  pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'));
+  const pdfName = filename.replace(/\.md$/, '.pdf');
+  const source = event.source;
+  const origin = event.origin;
 
-  event.source?.postMessage(
-    { type: 'EXPORT_PDF_DONE' },
-    { targetOrigin: event.origin }
-  );
+  // Wait for pdfmake's download callback before notifying the parent —
+  // posting EXPORT_PDF_DONE synchronously would let the parent remove the
+  // iframe before the blob URL is fully generated, aborting the download.
+  pdfMake.createPdf(docDef).download(pdfName, () => {
+    source?.postMessage(
+      { type: 'EXPORT_PDF_DONE' },
+      { targetOrigin: origin },
+    );
+  });
 });
