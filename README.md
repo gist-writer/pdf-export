@@ -80,7 +80,7 @@ GitHub Actions then:
 
 ### Verify the deploy
 
-Open https://gist-writer.github.io/pdf-export/ in Chrome, open DevTools (`⌘⌥J`), and run:
+Open https://gist-writer.github.io/pdf-export/ and run in DevTools console:
 
 ```js
 window.postMessage(
@@ -89,23 +89,21 @@ window.postMessage(
 );
 ```
 
-> Chrome will prompt **"Allow pasting"** the first time — type `allow pasting` and press Enter, then paste and run the command.
-
 A `test.pdf` should download with a heading and a paragraph.
 
 ### Debugging
 
 **`Cannot read properties of undefined (reading 'vfs')`**  
-pdfmake's vfs_fonts didn't load. Check the Network tab for a failed import of `vfs_fonts.js`. Usually a Vite bundling issue — check `src/main.ts` vfs assignment.
+pdfmake's vfs_fonts didn't load. Check the Network tab for a failed import of `vfs_fonts.js`. Usually a Vite bundling issue — check the vfs assignment in `src/main.ts`.
 
 **No download, no errors**  
 The `postMessage` origin didn't match. Make sure you're running the command on `https://gist-writer.github.io/pdf-export/` — not `localhost` or any other origin.
 
 **`message channel closed before a response was received`**  
-Safe to ignore — this is a browser extension (e.g. 1Password, uBlock) intercepting messages, not your code.
+Safe to ignore — a browser extension intercepting messages, not your code.
 
 **`Failed to execute 'put' on 'Cache': Request scheme 'chrome-extension' is unsupported`**  
-Also safe to ignore — a browser extension trying to cache its own resources via the service worker. Not related to pdf-export.
+Safe to ignore — a browser extension trying to cache its own resources via the service worker.
 
 ---
 
