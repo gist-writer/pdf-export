@@ -7,11 +7,12 @@ import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-type InlineNode = { text: string; bold?: boolean; italics?: boolean };
+type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
+// Parses **bold**, *italic*, and `code` spans within a line.
 function parseInline(raw: string): InlineNode[] {
   const nodes: InlineNode[] = [];
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  const re = /`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*/g;
   let last = 0;
   let m: RegExpExecArray | null;
 
@@ -20,9 +21,11 @@ function parseInline(raw: string): InlineNode[] {
       nodes.push({ text: raw.slice(last, m.index) });
     }
     if (m[1] !== undefined) {
-      nodes.push({ text: m[1], bold: true });
+      nodes.push({ text: m[1], font: 'Courier' });
     } else if (m[2] !== undefined) {
-      nodes.push({ text: m[2], italics: true });
+      nodes.push({ text: m[2], bold: true });
+    } else if (m[3] !== undefined) {
+      nodes.push({ text: m[3], italics: true });
     }
     last = m.index + m[0].length;
   }
@@ -34,22 +37,127 @@ function parseInline(raw: string): InlineNode[] {
   return nodes.length > 0 ? nodes : [{ text: raw }];
 }
 
+// Strips a markdown link [text](url) down to just the link text.
+function stripLinks(raw: string): string {
+  return raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+}
+
+function flushCodeBlock(content: any[], codeLines: string[]): void {
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[
+        {
+          text: codeLines.join('\n'),
+          font: 'Courier',
+          fontSize: 9,
+          margin: [6, 6, 6, 6],
+          border: [false, false, false, false],
+        },
+      ]],
+    },
+    fillColor: '#f6f8fa',
+    margin: [0, 4, 0, 8],
+  });
+}
+
 function markdownToDocDef(filename: string, markdown: string): TDocumentDefinitions {
   const lines = markdown.split('\n');
-  const content: TDocumentDefinitions['content'] = [];
+  const content: any[] = [];
+
+  let inFencedCode = false;
+  const codeLines: string[] = [];
+
+  // Pending list collector — null when no list is open.
+  let pendingList: { type: 'ul' | 'ol'; items: any[] } | null = null;
+
+  function flushList(): void {
+    if (!pendingList) return;
+    content.push({
+      [pendingList.type]: pendingList.items,
+      margin: [0, 0, 0, 6],
+    });
+    pendingList = null;
+  }
 
   for (const line of lines) {
-    if (line.startsWith('### ')) {
-      (content as any[]).push({ text: parseInline(line.slice(4)), style: 'h3' });
-    } else if (line.startsWith('## ')) {
-      (content as any[]).push({ text: parseInline(line.slice(3)), style: 'h2' });
-    } else if (line.startsWith('# ')) {
-      (content as any[]).push({ text: parseInline(line.slice(2)), style: 'h1' });
-    } else if (line.trim() === '') {
-      // blank line — skip
-    } else {
-      (content as any[]).push({ text: parseInline(line), margin: [0, 0, 0, 6] });
+
+    // --- Fenced code blocks ---
+    if (line.startsWith('```')) {
+      flushList();
+      if (!inFencedCode) {
+        inFencedCode = true;
+        codeLines.length = 0;
+      } else {
+        inFencedCode = false;
+        flushCodeBlock(content, codeLines);
+      }
+      continue;
     }
+    if (inFencedCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    // --- Unordered list item ---
+    if (/^[\-\*\+] /.test(line)) {
+      if (pendingList?.type !== 'ul') {
+        flushList();
+        pendingList = { type: 'ul', items: [] };
+      }
+      pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
+      continue;
+    }
+
+    // --- Ordered list item ---
+    if (/^\d+\. /.test(line)) {
+      if (pendingList?.type !== 'ol') {
+        flushList();
+        pendingList = { type: 'ol', items: [] };
+      }
+      pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^\d+\.\s+/, ''))) });
+      continue;
+    }
+
+    // Any non-list line closes the pending list before processing.
+    flushList();
+
+    // --- Headings ---
+    if (line.startsWith('###### ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
+    } else if (line.startsWith('##### ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
+    } else if (line.startsWith('#### ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
+    } else if (line.startsWith('### ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
+    } else if (line.startsWith('## ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
+    } else if (line.startsWith('# ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
+
+    // --- Horizontal rule ---
+    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
+
+    // --- Blockquote ---
+    } else if (line.startsWith('> ')) {
+      content.push({ text: parseInline(stripLinks(line.slice(2))), italics: true, color: '#555555', margin: [12, 0, 0, 6] });
+
+    // --- Blank line — paragraph spacer ---
+    } else if (line.trim() === '') {
+      content.push({ text: ' ', margin: [0, 0, 0, 8] });
+
+    // --- Plain paragraph ---
+    } else {
+      content.push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
+    }
+  }
+
+  // Flush any trailing open state after the last line.
+  flushList();
+  if (inFencedCode && codeLines.length > 0) {
+    flushCodeBlock(content, codeLines);
   }
 
   return {
@@ -58,6 +166,9 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       h1: { fontSize: 22, bold: true, margin: [0, 12, 0, 6] },
       h2: { fontSize: 18, bold: true, margin: [0, 10, 0, 4] },
       h3: { fontSize: 14, bold: true, margin: [0, 8, 0, 4] },
+      h4: { fontSize: 12, bold: true, margin: [0, 6, 0, 4] },
+      h5: { fontSize: 11, bold: true, italics: true, margin: [0, 6, 0, 4] },
+      h6: { fontSize: 10, bold: true, color: '#555555', margin: [0, 6, 0, 4] },
     },
     defaultStyle: { fontSize: 11, font: 'Roboto' },
     info: { title: filename.replace(/\.md$/, '') },
@@ -79,14 +190,10 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  // Post EXPORT_PDF_DONE only after the PDF has been fully generated
-  // and the download has been triggered. pdfMake.download() is async —
-  // calling postMessage before the callback would signal completion
-  // before the file is ready, causing the parent to tear down the iframe early.
   pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'), () => {
     source?.postMessage(
       { type: 'EXPORT_PDF_DONE' },
-      { targetOrigin: origin }
+      { targetOrigin: origin },
     );
   });
 });
