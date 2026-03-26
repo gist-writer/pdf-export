@@ -76,10 +76,17 @@ window.addEventListener('message', (event) => {
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
 
   const docDef = markdownToDocDef(filename, markdown);
-  pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'));
+  const source = event.source;
+  const origin = event.origin;
 
-  event.source?.postMessage(
-    { type: 'EXPORT_PDF_DONE' },
-    { targetOrigin: event.origin }
-  );
+  // Post EXPORT_PDF_DONE only after the PDF has been fully generated
+  // and the download has been triggered. pdfMake.download() is async —
+  // calling postMessage before the callback would signal completion
+  // before the file is ready, causing the parent to tear down the iframe early.
+  pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'), () => {
+    source?.postMessage(
+      { type: 'EXPORT_PDF_DONE' },
+      { targetOrigin: origin }
+    );
+  });
 });
