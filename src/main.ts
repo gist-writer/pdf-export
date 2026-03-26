@@ -21,7 +21,6 @@ function parseInline(raw: string): InlineNode[] {
       nodes.push({ text: raw.slice(last, m.index) });
     }
     if (m[1] !== undefined) {
-      // inline code — strip backticks, render in Courier
       nodes.push({ text: m[1], font: 'Courier' });
     } else if (m[2] !== undefined) {
       nodes.push({ text: m[2], bold: true });
@@ -43,38 +42,55 @@ function stripLinks(raw: string): string {
   return raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
 }
 
+function flushCodeBlock(content: any[], codeLines: string[]): void {
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[
+        {
+          text: codeLines.join('\n'),
+          font: 'Courier',
+          fontSize: 9,
+          margin: [6, 6, 6, 6],
+          border: [false, false, false, false],
+        },
+      ]],
+    },
+    fillColor: '#f6f8fa',
+    margin: [0, 4, 0, 8],
+  });
+}
+
 function markdownToDocDef(filename: string, markdown: string): TDocumentDefinitions {
   const lines = markdown.split('\n');
-  const content: TDocumentDefinitions['content'] = [];
+  const content: any[] = [];
+
   let inFencedCode = false;
   const codeLines: string[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // Pending list collector — null when no list is open.
+  let pendingList: { type: 'ul' | 'ol'; items: any[] } | null = null;
+
+  function flushList(): void {
+    if (!pendingList) return;
+    content.push({
+      [pendingList.type]: pendingList.items,
+      margin: [0, 0, 0, 6],
+    });
+    pendingList = null;
+  }
+
+  for (const line of lines) {
 
     // --- Fenced code blocks ---
     if (line.startsWith('```')) {
+      flushList();
       if (!inFencedCode) {
         inFencedCode = true;
         codeLines.length = 0;
       } else {
         inFencedCode = false;
-        (content as any[]).push({
-          table: {
-            widths: ['*'],
-            body: [[
-              {
-                text: codeLines.join('\n'),
-                font: 'Courier',
-                fontSize: 9,
-                margin: [6, 6, 6, 6],
-                border: [false, false, false, false],
-              },
-            ]],
-          },
-          fillColor: '#f6f8fa',
-          margin: [0, 4, 0, 8],
-        });
+        flushCodeBlock(content, codeLines);
       }
       continue;
     }
@@ -83,56 +99,65 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       continue;
     }
 
+    // --- Unordered list item ---
+    if (/^[\-\*\+] /.test(line)) {
+      if (pendingList?.type !== 'ul') {
+        flushList();
+        pendingList = { type: 'ul', items: [] };
+      }
+      pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
+      continue;
+    }
+
+    // --- Ordered list item ---
+    if (/^\d+\. /.test(line)) {
+      if (pendingList?.type !== 'ol') {
+        flushList();
+        pendingList = { type: 'ol', items: [] };
+      }
+      pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^\d+\.\s+/, ''))) });
+      continue;
+    }
+
+    // Any non-list line closes the pending list before processing.
+    flushList();
+
     // --- Headings ---
     if (line.startsWith('###### ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
+      content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
     } else if (line.startsWith('##### ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
+      content.push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
     } else if (line.startsWith('#### ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
+      content.push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
     } else if (line.startsWith('### ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
+      content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
     } else if (line.startsWith('## ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
+      content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
     } else if (line.startsWith('# ')) {
-      (content as any[]).push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
+      content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
 
     // --- Horizontal rule ---
     } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-      (content as any[]).push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
+      content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
 
     // --- Blockquote ---
     } else if (line.startsWith('> ')) {
-      (content as any[]).push({
-        text: parseInline(stripLinks(line.slice(2))),
-        italics: true,
-        color: '#555555',
-        margin: [12, 0, 0, 6],
-      });
-
-    // --- Unordered list item ---
-    } else if (/^[\-\*\+] /.test(line)) {
-      (content as any[]).push({
-        ul: [{ text: parseInline(stripLinks(line.slice(2))) }],
-        margin: [0, 0, 0, 2],
-      });
-
-    // --- Ordered list item ---
-    } else if (/^\d+\. /.test(line)) {
-      const text = line.replace(/^\d+\.\s+/, '');
-      (content as any[]).push({
-        ol: [{ text: parseInline(stripLinks(text)) }],
-        margin: [0, 0, 0, 2],
-      });
+      content.push({ text: parseInline(stripLinks(line.slice(2))), italics: true, color: '#555555', margin: [12, 0, 0, 6] });
 
     // --- Blank line — paragraph spacer ---
     } else if (line.trim() === '') {
-      (content as any[]).push({ text: ' ', margin: [0, 0, 0, 8] });
+      content.push({ text: ' ', margin: [0, 0, 0, 8] });
 
     // --- Plain paragraph ---
     } else {
-      (content as any[]).push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
+      content.push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
     }
+  }
+
+  // Flush any trailing open state after the last line.
+  flushList();
+  if (inFencedCode && codeLines.length > 0) {
+    flushCodeBlock(content, codeLines);
   }
 
   return {
@@ -165,10 +190,6 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  // Post EXPORT_PDF_DONE only after the PDF has been fully generated
-  // and the download has been triggered. pdfMake.download() is async —
-  // calling postMessage before the callback would signal completion
-  // before the file is ready, causing the parent to tear down the iframe early.
   pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'), () => {
     source?.postMessage(
       { type: 'EXPORT_PDF_DONE' },
