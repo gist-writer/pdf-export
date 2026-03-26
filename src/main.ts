@@ -1,7 +1,9 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
-(pdfMake as any).vfs = (pdfFonts as any).pdfMake.vfs;
+
+// pdfmake v0.2.x: vfs_fonts exports the vfs object directly
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+(pdfMake as any).vfs = (pdfFonts as any).vfs ?? (pdfFonts as any).default?.vfs ?? (pdfFonts as any).pdfMake?.vfs;
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
