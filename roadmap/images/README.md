@@ -12,14 +12,14 @@ When `main.ts` encounters a line matching `![alt](url)`, fetch the image, conver
 |---|---|
 | Fetch strategy | Direct fetch first; fall back through proxy chain on failure |
 | Proxy chain | `allorigins.win` → `corsproxy.org` → `thingproxy.freeboard.io` |
-| Timeout per attempt | `AbortSignal.timeout(5000)` — 5s per attempt, 20s worst-case |
+| Timeout per attempt | `AbortSignal.timeout(2000)` — 2s per attempt, 8s worst-case |
 | MIME detection | `blob.type` from response — reflects `Content-Type` forwarded by proxy |
 | Fallback | `{ text: altText, italics: true }` — PDF always exports, never crashes |
 | Scope | Block-level images only — line must match `/^!\[.*\]\(.*\)$/` |
 | Inline images | Out of scope — `some text ![x](url) more text` ignored |
 | Image width | `435` — full column width in pdfmake default page layout |
 | Concurrency guard | Boolean `pdfPending` lock — prevents double-export during async fetch |
-| `stripLinks` fix | Negative lookbehind `(?<!!)` so image syntax is not swallowed |
+| `stripLinks` fix | Detect image lines first (line-level check before `stripLinks` runs) — not a regex lookbehind |
 | `markdownToDocDef` | Becomes `async` to await image fetches before building doc definition |
 | Files touched | `src/main.ts` only |
 

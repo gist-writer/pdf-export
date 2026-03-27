@@ -18,13 +18,19 @@ Inline images embedded within a sentence (`some text ![x](url) more text`) are o
 
 ## Detection
 
-Image lines are detected inside the line-parsing loop in `markdownToDocDef` as the **first** branch, before `stripLinks` runs:
+Image lines are detected inside the line-parsing loop in `markdownToDocDef` as the **first** branch, before `stripLinks` runs. The check is a line-level regex match — if the entire trimmed line is an image, it is handled as an image and `stripLinks` is never called on it:
 
 ```ts
 const imgMatch = line.match(/^!\[(.*)\]\((.+)\)$/);
+if (imgMatch) {
+  // handle as image — continue skips stripLinks and all other branches
+  continue;
+}
+// only reaches here for non-image lines
+const stripped = stripLinks(line);
 ```
 
-If matched, the line is handled as an image and `continue` skips all subsequent parsing branches. `stripLinks` is never called on an image line.
+This is a **line-level gate**, not a regex modification. `stripLinks` itself is unchanged — it is simply never called on image lines.
 
 ---
 
@@ -39,7 +45,7 @@ Attempts to fetch the image and return a base64 data URI. Returns `null` on tota
 3. **corsproxy.org** — `https://corsproxy.org/?<encoded>`
 4. **thingproxy** — `https://thingproxy.freeboard.io/fetch/<encoded>`
 
-Each attempt uses `AbortSignal.timeout(5000)` — 5 seconds per attempt. If a response is received but `res.ok` is false, the attempt is skipped immediately without waiting for the full timeout.
+Each attempt uses `AbortSignal.timeout(2000)` — 2 seconds per attempt. Worst-case with all four attempts timing out: 8 seconds. If a response is received but `res.ok` is false, the attempt is skipped immediately without waiting for the full timeout.
 
 ### MIME type
 
@@ -87,19 +93,9 @@ The `message` event handler checks `pdfPending` immediately on entry. If `true`,
 
 ---
 
-## `stripLinks` fix
+## `stripLinks` and image lines
 
-The original `stripLinks` regex matched both `[text](url)` and `![alt](url)`, silently stripping image syntax before detection. Fixed with a negative lookbehind:
-
-```ts
-// Before:
-text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-
-// After:
-text.replace(/(?<!!)\[([^\]]+)\]\([^)]*\)/g, '$1')
-```
-
-`(?<!!)` ensures the regex does not match when preceded by `!`. Links continue to be stripped to their text; image syntax is preserved for the image detection branch.
+Image lines are detected **before** `stripLinks` is called — not by modifying `stripLinks` itself. The line-parsing loop checks for `![` at the start of the trimmed line first. If matched, the image branch runs and `continue` skips the rest of the loop body, including `stripLinks`. `stripLinks` is never called on an image line and remains unchanged.
 
 ---
 
