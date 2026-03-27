@@ -1,10 +1,10 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 
-import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf';
-import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf';
-import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf';
-import monoRegular from './fonts/iAWriterMonoS-Regular.ttf';
+import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
+import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf?inline';
+import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf?inline';
+import monoRegular from './fonts/iAWriterMonoS-Regular.ttf?inline';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
@@ -24,10 +24,10 @@ const FONT_DICT: TFontDictionary = {
 };
 
 const vfs: Record<string, string> = {
-  'iAWriterQuattroS-Regular.ttf': quattroRegular,
-  'iAWriterQuattroS-Bold.ttf': quattroBold,
-  'iAWriterQuattroS-Italic.ttf': quattroItalic,
-  'iAWriterMonoS-Regular.ttf': monoRegular,
+  'iAWriterQuattroS-Regular.ttf': quattroRegular.split(',')[1],
+  'iAWriterQuattroS-Bold.ttf': quattroBold.split(',')[1],
+  'iAWriterQuattroS-Italic.ttf': quattroItalic.split(',')[1],
+  'iAWriterMonoS-Regular.ttf': monoRegular.split(',')[1],
 };
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
