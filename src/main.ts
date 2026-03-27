@@ -9,16 +9,22 @@ import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-// Fetch a font and return as base64 via FileReader (binary-safe, no btoa issues).
-function fetchFontAsBase64(url: string): Promise<string> {
-  return fetch(url)
-    .then(res => res.blob())
-    .then(blob => new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    }));
+// Chunked btoa: avoids call-stack overflow on large binary strings.
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function fetchFontAsBase64(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Font fetch failed: ${url} (${res.status})`);
+  const buf = await res.arrayBuffer();
+  return arrayBufferToBase64(buf);
 }
 
 interface FontAssets {
@@ -26,7 +32,6 @@ interface FontAssets {
   fonts: TFontDictionary;
 }
 
-// Load all font files and return vfs + fonts definitions for createPdf().
 async function loadFonts(): Promise<FontAssets> {
   const [regular, bold, italic, mono] = await Promise.all([
     fetchFontAsBase64(quattroRegularUrl),
@@ -62,15 +67,16 @@ async function loadFonts(): Promise<FontAssets> {
 let fontAssets: FontAssets | null = null;
 let pendingExport: (() => void) | null = null;
 
-loadFonts().then(assets => {
-  fontAssets = assets;
-  pendingExport?.();
-  pendingExport = null;
-});
+loadFonts()
+  .then(assets => {
+    fontAssets = assets;
+    pendingExport?.();
+    pendingExport = null;
+  })
+  .catch(err => console.error('[pdf-export] Font load failed:', err));
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
-// Parses **bold**, *italic*, and `code` spans within a line.
 function parseInline(raw: string): InlineNode[] {
   const nodes: InlineNode[] = [];
   const re = /`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*/g;
@@ -78,27 +84,17 @@ function parseInline(raw: string): InlineNode[] {
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(raw)) !== null) {
-    if (m.index > last) {
-      nodes.push({ text: raw.slice(last, m.index) });
-    }
-    if (m[1] !== undefined) {
-      nodes.push({ text: m[1], font: 'iAWriterMono' });
-    } else if (m[2] !== undefined) {
-      nodes.push({ text: m[2], bold: true });
-    } else if (m[3] !== undefined) {
-      nodes.push({ text: m[3], italics: true });
-    }
+    if (m.index > last) nodes.push({ text: raw.slice(last, m.index) });
+    if (m[1] !== undefined) nodes.push({ text: m[1], font: 'iAWriterMono' });
+    else if (m[2] !== undefined) nodes.push({ text: m[2], bold: true });
+    else if (m[3] !== undefined) nodes.push({ text: m[3], italics: true });
     last = m.index + m[0].length;
   }
 
-  if (last < raw.length) {
-    nodes.push({ text: raw.slice(last) });
-  }
-
+  if (last < raw.length) nodes.push({ text: raw.slice(last) });
   return nodes.length > 0 ? nodes : [{ text: raw }];
 }
 
-// Strips a markdown link [text](url) down to just the link text.
 function stripLinks(raw: string): string {
   return raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
 }
@@ -122,7 +118,6 @@ function flushCodeBlock(content: any[], codeLines: string[]): void {
   });
 }
 
-// Renders a blockquote with a 3pt left border in the brand border colour.
 function makeBlockquote(inlineNodes: InlineNode[]): any {
   return {
     table: {
@@ -132,7 +127,6 @@ function makeBlockquote(inlineNodes: InlineNode[]): any {
           text: '',
           border: [false, false, false, false],
           fillColor: '#e0ddd8',
-          margin: [0, 0, 0, 0],
         },
         {
           text: inlineNodes,
@@ -151,32 +145,21 @@ function makeBlockquote(inlineNodes: InlineNode[]): any {
 function markdownToDocDef(filename: string, markdown: string): TDocumentDefinitions {
   const lines = markdown.split('\n');
   const content: any[] = [];
-
   let inFencedCode = false;
   const codeLines: string[] = [];
-
   let pendingList: { type: 'ul' | 'ol'; items: any[] } | null = null;
 
   function flushList(): void {
     if (!pendingList) return;
-    content.push({
-      [pendingList.type]: pendingList.items,
-      margin: [0, 0, 0, 6],
-    });
+    content.push({ [pendingList.type]: pendingList.items, margin: [0, 0, 0, 6] });
     pendingList = null;
   }
 
   for (const line of lines) {
-
     if (line.startsWith('```')) {
       flushList();
-      if (!inFencedCode) {
-        inFencedCode = true;
-        codeLines.length = 0;
-      } else {
-        inFencedCode = false;
-        flushCodeBlock(content, codeLines);
-      }
+      if (!inFencedCode) { inFencedCode = true; codeLines.length = 0; }
+      else { inFencedCode = false; flushCodeBlock(content, codeLines); }
       continue;
     }
     if (inFencedCode) { codeLines.push(line); continue; }
@@ -186,7 +169,6 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
       continue;
     }
-
     if (/^\d+\. /.test(line)) {
       if (pendingList?.type !== 'ol') { flushList(); pendingList = { type: 'ol', items: [] }; }
       pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^\d+\.\s+/, ''))) });
@@ -195,27 +177,16 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
 
     flushList();
 
-    if (line.startsWith('###### ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
-    } else if (line.startsWith('##### ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
-    } else if (line.startsWith('#### ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
-    } else if (line.startsWith('### ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
-    } else if (line.startsWith('## ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
-    } else if (line.startsWith('# ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
-    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-      content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 435, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
-    } else if (line.startsWith('> ')) {
-      content.push(makeBlockquote(parseInline(stripLinks(line.slice(2)))));
-    } else if (line.trim() === '') {
-      content.push({ text: ' ', margin: [0, 0, 0, 8] });
-    } else {
-      content.push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
-    }
+    if (line.startsWith('###### ')) content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
+    else if (line.startsWith('##### ')) content.push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
+    else if (line.startsWith('#### ')) content.push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
+    else if (line.startsWith('### ')) content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
+    else if (line.startsWith('## ')) content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
+    else if (line.startsWith('# ')) content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
+    else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 435, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
+    else if (line.startsWith('> ')) content.push(makeBlockquote(parseInline(stripLinks(line.slice(2)))));
+    else if (line.trim() === '') content.push({ text: ' ', margin: [0, 0, 0, 8] });
+    else content.push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
   }
 
   flushList();
@@ -232,26 +203,14 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       h5: { fontSize: 11, bold: true, italics: true, color: '#1a1a1a', margin: [0, 6, 0, 4] },
       h6: { fontSize: 10, bold: true, color: '#555555', margin: [0, 6, 0, 4] },
     },
-    defaultStyle: {
-      fontSize: 11,
-      font: 'iAWriterQuattro',
-      color: '#1a1a1a',
-      lineHeight: 1.7,
-    },
+    defaultStyle: { fontSize: 11, font: 'iAWriterQuattro', color: '#1a1a1a', lineHeight: 1.7 },
     info: { title: filename.replace(/\.md$/, '') },
   };
 }
 
-function runExport(
-  source: MessageEventSource | null,
-  origin: string,
-  filename: string,
-  markdown: string,
-): void {
-  const assets = fontAssets!;
+function runExport(source: MessageEventSource | null, origin: string, filename: string, markdown: string): void {
   const docDef = markdownToDocDef(filename, markdown);
-  // Pass vfs and fonts as 3rd/4th args to bypass global pdfMake state.
-  pdfMake.createPdf(docDef, undefined, assets.fonts, assets.vfs)
+  pdfMake.createPdf(docDef, undefined, fontAssets!.fonts, fontAssets!.vfs)
     .download(filename.replace(/\.md$/, '.pdf'), () => {
       source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
     });
@@ -259,13 +218,7 @@ function runExport(
 
 window.addEventListener('message', (event) => {
   if (event.origin !== ALLOWED_ORIGIN) return;
-
-  const { type, filename, markdown } = (event.data ?? {}) as {
-    type: string;
-    filename: string;
-    markdown: string;
-  };
-
+  const { type, filename, markdown } = (event.data ?? {}) as { type: string; filename: string; markdown: string };
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
 
   const source = event.source;
