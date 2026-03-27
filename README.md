@@ -1,5 +1,7 @@
 # pdf-export
 
+[![Deploy](https://img.shields.io/github/deployments/gist-writer/pdf-export/github-pages?label=deploy&logo=github&style=for-the-badge)](https://github.com/gist-writer/pdf-export/deployments)
+
 A standalone GitHub Pages microapp that listens for `postMessage` events and exports styled PDFs using **iA Writer Quattro** (body) and **iA Writer Mono** (code blocks) via pdfmake.
 
 Live at: `https://gist-writer.github.io/pdf-export/`
@@ -87,5 +89,3 @@ strings test.pdf | grep FontName
 ```
 
 Bumps version, commits, pushes a tag — GitHub Actions builds and deploys to `gh-pages`.
-
-Monitor at: `https://github.com/gist-writer/pdf-export/actions`
