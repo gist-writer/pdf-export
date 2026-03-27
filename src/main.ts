@@ -1,23 +1,10 @@
 import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
-import vfsFonts from './vfs_fonts.js';
+
+pdfMake.vfs = pdfFonts.pdfMake.vfs;
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
-
-const FONTS = {
-  iAWriterQuattro: {
-    normal: 'iAWriterQuattroS-Regular.ttf',
-    bold: 'iAWriterQuattroS-Bold.ttf',
-    italics: 'iAWriterQuattroS-Italic.ttf',
-    bolditalics: 'iAWriterQuattroS-Bold.ttf',
-  },
-  iAWriterMono: {
-    normal: 'iAWriterMonoS-Regular.ttf',
-    bold: 'iAWriterMonoS-Regular.ttf',
-    italics: 'iAWriterMonoS-Regular.ttf',
-    bolditalics: 'iAWriterMonoS-Regular.ttf',
-  },
-};
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
@@ -29,7 +16,7 @@ function parseInline(raw: string): InlineNode[] {
 
   while ((m = re.exec(raw)) !== null) {
     if (m.index > last) nodes.push({ text: raw.slice(last, m.index) });
-    if (m[1] !== undefined) nodes.push({ text: m[1], font: 'iAWriterMono' });
+    if (m[1] !== undefined) nodes.push({ text: m[1], font: 'Courier' });
     else if (m[2] !== undefined) nodes.push({ text: m[2], bold: true });
     else if (m[3] !== undefined) nodes.push({ text: m[3], italics: true });
     last = m.index + m[0].length;
@@ -50,7 +37,7 @@ function flushCodeBlock(content: any[], codeLines: string[]): void {
       body: [[
         {
           text: codeLines.join('\n'),
-          font: 'iAWriterMono',
+          font: 'Courier',
           fontSize: 9,
           margin: [6, 6, 6, 6],
           border: [false, false, false, false],
@@ -147,7 +134,7 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       h5: { fontSize: 11, bold: true, italics: true, color: '#1a1a1a', margin: [0, 6, 0, 4] },
       h6: { fontSize: 10, bold: true, color: '#555555', margin: [0, 6, 0, 4] },
     },
-    defaultStyle: { fontSize: 11, font: 'iAWriterQuattro', color: '#1a1a1a', lineHeight: 1.7 },
+    defaultStyle: { fontSize: 11, font: 'Roboto', color: '#1a1a1a', lineHeight: 1.7 },
     info: { title: filename.replace(/\.md$/, '') },
   };
 }
@@ -160,7 +147,7 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  pdfMake.createPdf(markdownToDocDef(filename, markdown), undefined, FONTS, vfsFonts)
+  pdfMake.createPdf(markdownToDocDef(filename, markdown))
     .download(filename.replace(/\.md$/, '.pdf'), () => {
       source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
     });
