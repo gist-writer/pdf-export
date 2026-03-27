@@ -66,7 +66,7 @@ This is passed directly to pdfmake as the `image` property.
 On successful fetch:
 
 ```ts
-{ image: dataUri, width: 435 }
+{ image: dataUri, width: 435, margin: [0, 4, 0, 8] }
 ```
 
 `width: 435` is full column width in the default pdfmake A4 page layout (595pt wide, 40pt margins each side, 80pt total → 515pt usable, minus standard indent → 435pt practical maximum).
@@ -89,13 +89,64 @@ A module-level `pdfPending` boolean prevents a second export from starting while
 let pdfPending = false;
 ```
 
-The `message` event handler checks `pdfPending` immediately on entry. If `true`, it returns without processing. On entry with `false`, it sets `pdfPending = true`. A `try/finally` block resets `pdfPending = false` and sends `EXPORT_PDF_DONE` on all exit paths — including unexpected errors.
+The `message` event handler checks `pdfPending` immediately on entry. If `true`, it returns without processing. On entry with `false`, it sets `pdfPending = true`. `pdfPending` resets to `false` inside the `.download()` callback on success, and inside the `catch` block on error — ensuring the lock releases only after the download completes, not when `createPdf` returns.
 
 ---
 
 ## `stripLinks` and image lines
 
 Image lines are detected **before** `stripLinks` is called — not by modifying `stripLinks` itself. The line-parsing loop checks for `![` at the start of the trimmed line first. If matched, the image branch runs and `continue` skips the rest of the loop body, including `stripLinks`. `stripLinks` is never called on an image line and remains unchanged.
+
+---
+
+## Manual testing
+
+Open `https://gist-writer.github.io/pdf-export/` and run these commands from the DevTools console.
+
+### Happy path — real image renders
+
+```js
+window.postMessage(
+  {
+    type: 'EXPORT_PDF',
+    filename: 'test-real.md',
+    markdown: `# Real image\n\n![cat](https://i.imgur.com/CzXTtJV.jpg)\n\nDone.`
+  },
+  '*'
+)
+```
+
+Expected: `test-real.pdf` downloads. Image renders at full column width between the heading and "Done."
+
+### Fallback path — CORS-blocked URL
+
+```js
+window.postMessage(
+  {
+    type: 'EXPORT_PDF',
+    filename: 'test-fallback.md',
+    markdown: `# Fallback test\n\n![blocked image](https://notion.so/fake.png)`
+  },
+  '*'
+)
+```
+
+Expected: `test-fallback.pdf` downloads. Italic text *blocked image* appears where the image would be. Console will show three CORS/network errors as the proxy chain is exhausted — this is normal.
+
+### Text-only — no regression
+
+```js
+window.postMessage(
+  {
+    type: 'EXPORT_PDF',
+    filename: 'test-text.md',
+    markdown: `# Text only\n\nNo images here. [link text](https://example.com) should strip to plain text.`
+  },
+  '*'
+)
+```
+
+Expected: `test-text.pdf` downloads. Link renders as plain `link text`, no URL visible.
 
 ---
 
