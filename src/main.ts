@@ -10,6 +10,12 @@ const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
 let pdfPending = false;
 
+const CORS_PROXIES = [
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.org/?',
+  'https://thingproxy.freeboard.io/fetch/',
+];
+
 const FONT_DICT: TFontDictionary = {
   iAWriterQuattro: {
     normal: 'iAWriterQuattroS-Regular.ttf',
@@ -31,6 +37,34 @@ const vfs: Record<string, string> = {
   'iAWriterQuattroS-Italic.ttf': quattroItalic.split(',')[1],
   'iAWriterMonoS-Regular.ttf': monoRegular.split(',')[1],
 };
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  const attempts = [url, ...CORS_PROXIES.map(p => p + encodeURIComponent(url))];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt, { signal: AbortSignal.timeout(2000) });
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      const mime = blob.type || 'image/jpeg';
+      const b64 = await blobToBase64(blob);
+      return `data:${mime};base64,${b64.split(',')[1]}`;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
