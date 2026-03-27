@@ -14,9 +14,14 @@ function ttfBase64Plugin(): Plugin {
   };
 }
 
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+
 export default defineConfig({
   base: '/pdf-export/',
   plugins: [ttfBase64Plugin()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,

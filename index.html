@@ -4,8 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PDF Export</title>
+    <style>
+      body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #faf9f7; font-family: monospace; color: #999; font-size: 12px; }
+    </style>
   </head>
   <body>
+    <div id="version">loading…</div>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module">
+      document.getElementById('version').textContent = 'pdf-export v' + __APP_VERSION__;
+      document.title = 'pdf-export v' + __APP_VERSION__;
+    </script>
   </body>
 </html>
