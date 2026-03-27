@@ -1,5 +1,5 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 
 // iA Writer fonts — TTF files committed to src/fonts/
 import quattroRegularUrl from './fonts/iAWriterQuattroS-Regular.ttf?url';
@@ -9,25 +9,25 @@ import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-// Fetch a font file and return it as a base64 string via FileReader.
-// pdfmake/pdfkit requires base64-encoded font data in its vfs.
+// Fetch a font and return as base64 via FileReader (binary-safe, no btoa issues).
 function fetchFontAsBase64(url: string): Promise<string> {
   return fetch(url)
     .then(res => res.blob())
     .then(blob => new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        // dataUrl is "data:font/ttf;base64,<data>" — strip the prefix.
-        resolve(dataUrl.split(',')[1]);
-      };
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     }));
 }
 
-// Load font files and register with pdfmake vfs.
-async function loadFonts(): Promise<void> {
+interface FontAssets {
+  vfs: Record<string, string>;
+  fonts: TFontDictionary;
+}
+
+// Load all font files and return vfs + fonts definitions for createPdf().
+async function loadFonts(): Promise<FontAssets> {
   const [regular, bold, italic, mono] = await Promise.all([
     fetchFontAsBase64(quattroRegularUrl),
     fetchFontAsBase64(quattroBoldUrl),
@@ -35,36 +35,35 @@ async function loadFonts(): Promise<void> {
     fetchFontAsBase64(monoRegularUrl),
   ]);
 
-  pdfMake.vfs = {
-    'iAWriterQuattroS-Regular.ttf': regular,
-    'iAWriterQuattroS-Bold.ttf': bold,
-    'iAWriterQuattroS-Italic.ttf': italic,
-    'iAWriterMonoS-Regular.ttf': mono,
-  };
-
-  pdfMake.fonts = {
-    iAWriterQuattro: {
-      normal: 'iAWriterQuattroS-Regular.ttf',
-      bold: 'iAWriterQuattroS-Bold.ttf',
-      italics: 'iAWriterQuattroS-Italic.ttf',
-      bolditalics: 'iAWriterQuattroS-Bold.ttf',
+  return {
+    vfs: {
+      'iAWriterQuattroS-Regular.ttf': regular,
+      'iAWriterQuattroS-Bold.ttf': bold,
+      'iAWriterQuattroS-Italic.ttf': italic,
+      'iAWriterMonoS-Regular.ttf': mono,
     },
-    iAWriterMono: {
-      normal: 'iAWriterMonoS-Regular.ttf',
-      bold: 'iAWriterMonoS-Regular.ttf',
-      italics: 'iAWriterMonoS-Regular.ttf',
-      bolditalics: 'iAWriterMonoS-Regular.ttf',
+    fonts: {
+      iAWriterQuattro: {
+        normal: 'iAWriterQuattroS-Regular.ttf',
+        bold: 'iAWriterQuattroS-Bold.ttf',
+        italics: 'iAWriterQuattroS-Italic.ttf',
+        bolditalics: 'iAWriterQuattroS-Bold.ttf',
+      },
+      iAWriterMono: {
+        normal: 'iAWriterMonoS-Regular.ttf',
+        bold: 'iAWriterMonoS-Regular.ttf',
+        italics: 'iAWriterMonoS-Regular.ttf',
+        bolditalics: 'iAWriterMonoS-Regular.ttf',
+      },
     },
   };
 }
 
-// Initialise fonts once on load; queue any export requests that arrive
-// before fonts are ready.
-let fontsReady = false;
+let fontAssets: FontAssets | null = null;
 let pendingExport: (() => void) | null = null;
 
-loadFonts().then(() => {
-  fontsReady = true;
+loadFonts().then(assets => {
+  fontAssets = assets;
   pendingExport?.();
   pendingExport = null;
 });
@@ -156,7 +155,6 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
   let inFencedCode = false;
   const codeLines: string[] = [];
 
-  // Pending list collector — null when no list is open.
   let pendingList: { type: 'ul' | 'ol'; items: any[] } | null = null;
 
   function flushList(): void {
@@ -170,7 +168,6 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
 
   for (const line of lines) {
 
-    // --- Fenced code blocks ---
     if (line.startsWith('```')) {
       flushList();
       if (!inFencedCode) {
@@ -182,35 +179,22 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       }
       continue;
     }
-    if (inFencedCode) {
-      codeLines.push(line);
-      continue;
-    }
+    if (inFencedCode) { codeLines.push(line); continue; }
 
-    // --- Unordered list item ---
     if (/^[\-\*\+] /.test(line)) {
-      if (pendingList?.type !== 'ul') {
-        flushList();
-        pendingList = { type: 'ul', items: [] };
-      }
+      if (pendingList?.type !== 'ul') { flushList(); pendingList = { type: 'ul', items: [] }; }
       pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
       continue;
     }
 
-    // --- Ordered list item ---
     if (/^\d+\. /.test(line)) {
-      if (pendingList?.type !== 'ol') {
-        flushList();
-        pendingList = { type: 'ol', items: [] };
-      }
+      if (pendingList?.type !== 'ol') { flushList(); pendingList = { type: 'ol', items: [] }; }
       pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^\d+\.\s+/, ''))) });
       continue;
     }
 
-    // Any non-list line closes the pending list before processing.
     flushList();
 
-    // --- Headings ---
     if (line.startsWith('###### ')) {
       content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
     } else if (line.startsWith('##### ')) {
@@ -223,30 +207,19 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
       content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
     } else if (line.startsWith('# ')) {
       content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
-
-    // --- Horizontal rule ---
     } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
       content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 435, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0, 6, 0, 6] });
-
-    // --- Blockquote ---
     } else if (line.startsWith('> ')) {
       content.push(makeBlockquote(parseInline(stripLinks(line.slice(2)))));
-
-    // --- Blank line — paragraph spacer ---
     } else if (line.trim() === '') {
       content.push({ text: ' ', margin: [0, 0, 0, 8] });
-
-    // --- Plain paragraph ---
     } else {
       content.push({ text: parseInline(stripLinks(line)), margin: [0, 0, 0, 6] });
     }
   }
 
-  // Flush any trailing open state after the last line.
   flushList();
-  if (inFencedCode && codeLines.length > 0) {
-    flushCodeBlock(content, codeLines);
-  }
+  if (inFencedCode && codeLines.length > 0) flushCodeBlock(content, codeLines);
 
   return {
     content,
@@ -275,13 +248,13 @@ function runExport(
   filename: string,
   markdown: string,
 ): void {
+  const assets = fontAssets!;
   const docDef = markdownToDocDef(filename, markdown);
-  pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'), () => {
-    source?.postMessage(
-      { type: 'EXPORT_PDF_DONE' },
-      { targetOrigin: origin },
-    );
-  });
+  // Pass vfs and fonts as 3rd/4th args to bypass global pdfMake state.
+  pdfMake.createPdf(docDef, undefined, assets.fonts, assets.vfs)
+    .download(filename.replace(/\.md$/, '.pdf'), () => {
+      source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
+    });
 }
 
 window.addEventListener('message', (event) => {
@@ -298,7 +271,7 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  if (fontsReady) {
+  if (fontAssets) {
     runExport(source, origin, filename, markdown);
   } else {
     pendingExport = () => runExport(source, origin, filename, markdown);
