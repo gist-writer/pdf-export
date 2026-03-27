@@ -1,79 +1,23 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
-
-// iA Writer fonts — TTF files committed to src/fonts/
-import quattroRegularUrl from './fonts/iAWriterQuattroS-Regular.ttf?url';
-import quattroBoldUrl from './fonts/iAWriterQuattroS-Bold.ttf?url';
-import quattroItalicUrl from './fonts/iAWriterQuattroS-Italic.ttf?url';
-import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
+import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import vfsFonts from './vfs_fonts.js';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-// Chunked btoa: avoids call-stack overflow on large binary strings.
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function fetchFontAsBase64(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Font fetch failed: ${url} (${res.status})`);
-  const buf = await res.arrayBuffer();
-  return arrayBufferToBase64(buf);
-}
-
-interface FontAssets {
-  vfs: Record<string, string>;
-  fonts: TFontDictionary;
-}
-
-async function loadFonts(): Promise<FontAssets> {
-  const [regular, bold, italic, mono] = await Promise.all([
-    fetchFontAsBase64(quattroRegularUrl),
-    fetchFontAsBase64(quattroBoldUrl),
-    fetchFontAsBase64(quattroItalicUrl),
-    fetchFontAsBase64(monoRegularUrl),
-  ]);
-
-  return {
-    vfs: {
-      'iAWriterQuattroS-Regular.ttf': regular,
-      'iAWriterQuattroS-Bold.ttf': bold,
-      'iAWriterQuattroS-Italic.ttf': italic,
-      'iAWriterMonoS-Regular.ttf': mono,
-    },
-    fonts: {
-      iAWriterQuattro: {
-        normal: 'iAWriterQuattroS-Regular.ttf',
-        bold: 'iAWriterQuattroS-Bold.ttf',
-        italics: 'iAWriterQuattroS-Italic.ttf',
-        bolditalics: 'iAWriterQuattroS-Bold.ttf',
-      },
-      iAWriterMono: {
-        normal: 'iAWriterMonoS-Regular.ttf',
-        bold: 'iAWriterMonoS-Regular.ttf',
-        italics: 'iAWriterMonoS-Regular.ttf',
-        bolditalics: 'iAWriterMonoS-Regular.ttf',
-      },
-    },
-  };
-}
-
-let fontAssets: FontAssets | null = null;
-let pendingExport: (() => void) | null = null;
-
-loadFonts()
-  .then(assets => {
-    fontAssets = assets;
-    pendingExport?.();
-    pendingExport = null;
-  })
-  .catch(err => console.error('[pdf-export] Font load failed:', err));
+const FONTS = {
+  iAWriterQuattro: {
+    normal: 'iAWriterQuattroS-Regular.ttf',
+    bold: 'iAWriterQuattroS-Bold.ttf',
+    italics: 'iAWriterQuattroS-Italic.ttf',
+    bolditalics: 'iAWriterQuattroS-Bold.ttf',
+  },
+  iAWriterMono: {
+    normal: 'iAWriterMonoS-Regular.ttf',
+    bold: 'iAWriterMonoS-Regular.ttf',
+    italics: 'iAWriterMonoS-Regular.ttf',
+    bolditalics: 'iAWriterMonoS-Regular.ttf',
+  },
+};
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
@@ -208,14 +152,6 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
   };
 }
 
-function runExport(source: MessageEventSource | null, origin: string, filename: string, markdown: string): void {
-  const docDef = markdownToDocDef(filename, markdown);
-  pdfMake.createPdf(docDef, undefined, fontAssets!.fonts, fontAssets!.vfs)
-    .download(filename.replace(/\.md$/, '.pdf'), () => {
-      source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
-    });
-}
-
 window.addEventListener('message', (event) => {
   if (event.origin !== ALLOWED_ORIGIN) return;
   const { type, filename, markdown } = (event.data ?? {}) as { type: string; filename: string; markdown: string };
@@ -224,9 +160,8 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  if (fontAssets) {
-    runExport(source, origin, filename, markdown);
-  } else {
-    pendingExport = () => runExport(source, origin, filename, markdown);
-  }
+  pdfMake.createPdf(markdownToDocDef(filename, markdown), undefined, FONTS, vfsFonts)
+    .download(filename.replace(/\.md$/, '.pdf'), () => {
+      source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
+    });
 });
