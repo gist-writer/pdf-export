@@ -196,9 +196,10 @@ window.addEventListener('message', async (event) => {
     const docDef = await markdownToDocDef(filename, markdown);
     pdfMake.createPdf(docDef, undefined, FONT_DICT, vfs)
       .download(filename.replace(/\.md$/, '.pdf'), () => {
+        pdfPending = false;
         source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
       });
-  } finally {
+  } catch {
     pdfPending = false;
   }
 });
