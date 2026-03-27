@@ -1,11 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
+import fs from 'fs';
+import path from 'path';
+
+function ttfBase64Plugin(): Plugin {
+  return {
+    name: 'ttf-base64',
+    transform(_code, id) {
+      if (!id.endsWith('.ttf')) return null;
+      const buf = fs.readFileSync(id);
+      const b64 = buf.toString('base64');
+      return { code: `export default "${b64}";`, map: null };
+    },
+  };
+}
 
 export default defineConfig({
   base: '/pdf-export/',
-  assetsInclude: ['**/*.ttf'],
+  plugins: [ttfBase64Plugin()],
   build: {
     outDir: 'dist',
     sourcemap: false,
-    assetsInlineLimit: 1024 * 1024, // 1 MB — inlines TTF as base64 into the JS bundle
   },
 });
