@@ -1,5 +1,5 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
+import type { Content, TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 
 import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
 import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf?inline';
@@ -7,6 +7,7 @@ import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf?inline';
 import monoRegular from './fonts/iAWriterMonoS-Regular.ttf?inline';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
+const CONTENT_WIDTH = 435;
 
 let pdfPending = false;
 
@@ -87,14 +88,14 @@ function stripLinks(raw: string): string {
   return raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
 }
 
-function flushCodeBlock(content: any[], lines: string[]): void {
+function flushCodeBlock(content: Content[], lines: string[]): void {
   content.push({
     table: { widths: ['*'], body: [[{ text: lines.join('\n'), font: 'iAWriterMono', fontSize: 9, margin: [6,6,6,6], border: [false,false,false,false] }]] },
     fillColor: '#f6f8fa', margin: [0, 4, 0, 8],
   });
 }
 
-function makeBlockquote(nodes: InlineNode[]): any {
+function makeBlockquote(nodes: InlineNode[]): Content {
   return {
     table: { widths: [3, '*'], body: [[
       { text: '', border: [false,false,false,false], fillColor: '#e0ddd8' },
@@ -105,17 +106,17 @@ function makeBlockquote(nodes: InlineNode[]): any {
 }
 
 async function markdownToDocDef(filename: string, markdown: string): Promise<TDocumentDefinitions> {
-  // Pre-fetch all images in parallel before the line loop
-  const imageUrls = [...markdown.matchAll(/^!\[.*\]\((.+)\)$/gm)].map(m => m[1]);
+  // Pre-fetch all unique image URLs in parallel before the line loop
+  const imageUrls = [...new Set([...markdown.matchAll(/^!\[.*\]\((.+)\)$/gm)].map(m => m[1]))];
   const imageMap = new Map(
     await Promise.all(imageUrls.map(async url => [url, await fetchImageAsBase64(url)] as const))
   );
 
   const lines = markdown.split('\n');
-  const content: any[] = [];
+  const content: Content[] = [];
   let inCode = false;
   const codeLines: string[] = [];
-  let pendingList: { type: 'ul' | 'ol'; items: any[] } | null = null;
+  let pendingList: { type: 'ul' | 'ol'; items: Content[] } | null = null;
 
   const flushList = () => {
     if (!pendingList) return;
@@ -138,7 +139,7 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
       const [, alt, url] = imgMatch;
       const dataUri = imageMap.get(url);
       if (dataUri) {
-        content.push({ image: dataUri, width: 435, margin: [0, 4, 0, 8] });
+        content.push({ image: dataUri, width: CONTENT_WIDTH, margin: [0, 4, 0, 8] });
       } else {
         content.push({ text: alt || url, italics: true });
       }
@@ -163,7 +164,7 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
     else if (line.startsWith('### ')) content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
     else if (line.startsWith('## ')) content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
     else if (line.startsWith('# ')) content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
-    else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 435, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0,6,0,6] });
+    else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0, lineWidth: 0.5, lineColor: '#cccccc' }], margin: [0,6,0,6] });
     else if (line.startsWith('> ')) content.push(makeBlockquote(parseInline(stripLinks(line.slice(2)))));
     else if (line.trim() === '') content.push({ text: ' ', margin: [0,0,0,8] });
     else content.push({ text: parseInline(stripLinks(line)), margin: [0,0,0,6] });
