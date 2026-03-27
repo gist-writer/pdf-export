@@ -105,6 +105,12 @@ function makeBlockquote(nodes: InlineNode[]): any {
 }
 
 async function markdownToDocDef(filename: string, markdown: string): Promise<TDocumentDefinitions> {
+  // Pre-fetch all images in parallel before the line loop
+  const imageUrls = [...markdown.matchAll(/^!\[.*\]\((.+)\)$/gm)].map(m => m[1]);
+  const imageMap = new Map(
+    await Promise.all(imageUrls.map(async url => [url, await fetchImageAsBase64(url)] as const))
+  );
+
   const lines = markdown.split('\n');
   const content: any[] = [];
   let inCode = false;
@@ -126,13 +132,13 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
     }
     if (inCode) { codeLines.push(line); continue; }
 
-    // Image lines — detected before stripLinks runs
+    // Image lines — detected before stripLinks runs, lookup from pre-fetched map
     const imgMatch = line.trim().match(/^!\[(.*)\]\((.+)\)$/);
     if (imgMatch) {
       const [, alt, url] = imgMatch;
-      const dataUri = await fetchImageAsBase64(url);
+      const dataUri = imageMap.get(url);
       if (dataUri) {
-        content.push({ image: dataUri, width: 435 });
+        content.push({ image: dataUri, width: 435, margin: [0, 4, 0, 8] });
       } else {
         content.push({ text: alt || url, italics: true });
       }
