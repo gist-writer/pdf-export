@@ -23,40 +23,15 @@ The iframe receives it, converts markdown to a pdfmake document definition, and 
 
 ## Image support
 
-Images on their own line are fetched and embedded as base64 at export time:
+Images on their own line are fetched and embedded as base64 at export time. If the fetch fails, the image is replaced with italic alt text — the PDF always exports.
 
-```md
-![a bike](https://imgur.com/bike.jpg)
-```
-
-Renders as a full-width image (`width: 435`) in the PDF. If the fetch fails for any reason, the image is replaced with italic alt text — the PDF always exports.
-
-### Fetch strategy
-
-The iframe fetches images directly using a tiered fallback:
-
-1. **Direct fetch** — works for any host that sends `Access-Control-Allow-Origin: *` (Imgur, GitHub raw, most CDNs)
-2. **`allorigins.win` proxy** — fallback for CORS-blocked hosts
-3. **`corsproxy.org` proxy** — second fallback
-4. **Italic alt text** — if all attempts fail
-
-Each attempt has a hard timeout (`2s` direct, `3s` per proxy). Worst case for a fully CORS-blocked image with both proxies down: ~8s before falling back to alt text.
-
-### Scope
-
-- Block-level images only — `![alt](url)` must be on its own line
-- Inline images (`some text ![x](url) more text`) are not supported
-- Images are capped at `width: 435` (full text column width)
+Fetch strategy: direct → `allorigins.win` → `corsproxy.org` → italic alt text. Each attempt has a hard timeout. Inline images (`some text ![x](url) more text`) are not supported.
 
 ---
 
 ## Font setup
 
-Fonts are embedded at **build time** using Vite's `?inline` import — the full TTF is base64-encoded and baked directly into the JS bundle. No runtime fetching, no network dependency.
-
-### Font files required
-
-All four must be **static** TTF variants (not variable fonts) from [`iaolo/iA-Fonts`](https://github.com/iaolo/iA-Fonts) at commit `f733920`:
+Fonts are embedded at build time via Vite's `?inline` import — baked into the JS bundle, no runtime fetching. All four must be **static** TTF variants (not variable fonts) from [`iaolo/iA-Fonts`](https://github.com/iaolo/iA-Fonts) at commit `f733920`:
 
 ```bash
 cd src/fonts
@@ -70,52 +45,13 @@ curl -L -o iAWriterMonoS-Regular.ttf \
   "https://github.com/iaolo/iA-Fonts/raw/f733920/iA%20Writer%20Mono/Static/iAWriterMonoS-Regular.ttf"
 ```
 
-Expected file sizes:
-
-| File | Size |
-|------|------|
-| iAWriterQuattroS-Regular.ttf | ~116 KB |
-| iAWriterQuattroS-Bold.ttf | ~117 KB |
-| iAWriterQuattroS-Italic.ttf | ~102 KB |
-| iAWriterMonoS-Regular.ttf | ~95 KB |
-
-> **Important:** Do NOT use variable TTFs (~304 KB each). pdfkit (used internally by pdfmake) only supports static TTF and OTF. Variable fonts and WOFF/WOFF2 will throw `Unknown font format`.
-
-### How fonts are embedded
-
-In `src/main.ts`:
-
-```ts
-import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
-// ...etc
-
-const vfs: Record<string, string> = {
-  'iAWriterQuattroS-Regular.ttf': quattroRegular.split(',')[1], // strip data:font/ttf;base64, prefix
-  // ...etc
-};
-```
-
-Vite's `?inline` embeds the TTF as a base64 data URI. The `.split(',')[1]` strips the `data:font/ttf;base64,` prefix — pdfmake VFS needs raw base64 only.
-
-The resulting JS bundle is **~1.86 MB** (~589 KB of that is font data).
-
----
-
-## PDF output size
-
-Exported PDFs are **small by design** — typically 18–30 KB for a short document. This is correct behaviour.
-
-pdfmake uses **font subsetting**: only the glyphs (characters) actually used in the document are embedded in the PDF, not the full font files. A short test document uses ~200 unique glyphs, producing a small PDF. A long document with many unique characters will produce a proportionally larger PDF.
-
-**Do not use file size alone to verify fonts are working.** Use the bundle check below instead.
+> **Important:** Do NOT use variable TTFs. pdfkit only supports static TTF/OTF — variable fonts and WOFF/WOFF2 will throw `Unknown font format`.
 
 ---
 
 ## Testing
 
 ### Verify fonts are embedded in the bundle
-
-Open `https://gist-writer.github.io/pdf-export/` in an incognito window, open DevTools console (`Cmd+Option+J`) and run:
 
 ```js
 fetch(document.querySelector('script[src*="index"]').src)
@@ -126,9 +62,6 @@ fetch(document.querySelector('script[src*="index"]').src)
   });
 ```
 
-✅ `FONTS EMBEDDED: AAEAAAASAQAABAAgRFNJ...` — working correctly  
-❌ `NO INLINE FONTS FOUND` — fonts not in bundle, build is broken
-
 ### Trigger a PDF export
 
 ```js
@@ -138,14 +71,11 @@ window.postMessage(
 );
 ```
 
-PDF downloads. Open it — body text should render in **iA Writer Quattro** serif, not Helvetica. Code should render in **iA Writer Mono**.
-
 ### Verify PDF font in terminal
 
 ```bash
 strings test.pdf | grep FontName
 # Should output: /FontName /BZZZZZ+iAWriterQuattroS-Regular
-# The BZZZZZ+ prefix is pdfmake's font subset tag — this confirms real fonts, not fallback
 ```
 
 ---
@@ -156,16 +86,6 @@ strings test.pdf | grep FontName
 ./deploy.sh
 ```
 
-Bumps the version in `package.json`, commits, pushes a version tag, triggers GitHub Actions which builds with Vite and pushes `dist/` to the `gh-pages` branch.
+Bumps version, commits, pushes a tag — GitHub Actions builds and deploys to `gh-pages`.
 
 Monitor at: `https://github.com/gist-writer/pdf-export/actions`
-
----
-
-## Architecture
-
-- **Vite** + **TypeScript** — build tool
-- **pdfmake** — PDF generation in-browser
-- **GitHub Pages** — hosting (`gh-pages` branch)
-- `src/main.ts` — all logic: font loading, markdown parser, pdfmake document definition
-- `vite.config.ts` — minimal config, `assetsInlineLimit: 200000` ensures TTFs inline via `?inline`
