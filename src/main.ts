@@ -1,10 +1,10 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 
-import quattroRegularUrl from './fonts/iAWriterQuattroS-Regular.ttf?url';
-import quattroBoldUrl from './fonts/iAWriterQuattroS-Bold.ttf?url';
-import quattroItalicUrl from './fonts/iAWriterQuattroS-Italic.ttf?url';
-import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
+import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
+import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf?inline';
+import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf?inline';
+import monoRegular from './fonts/iAWriterMonoS-Regular.ttf?inline';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
@@ -23,26 +23,18 @@ const FONT_DICT: TFontDictionary = {
   },
 };
 
-function toBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  const chunk = 0x8000;
-  let out = '';
-  for (let i = 0; i < bytes.length; i += chunk)
-    out += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  return btoa(out);
+// Strip the data URI prefix — pdfmake vfs wants raw base64
+function stripPrefix(dataUri: string): string {
+  const idx = dataUri.indexOf(',');
+  return idx >= 0 ? dataUri.slice(idx + 1) : dataUri;
 }
 
-const vfsPromise: Promise<Record<string, string>> = Promise.all([
-  fetch(quattroRegularUrl).then(r => r.arrayBuffer()).then(toBase64),
-  fetch(quattroBoldUrl).then(r => r.arrayBuffer()).then(toBase64),
-  fetch(quattroItalicUrl).then(r => r.arrayBuffer()).then(toBase64),
-  fetch(monoRegularUrl).then(r => r.arrayBuffer()).then(toBase64),
-]).then(([regular, bold, italic, mono]) => ({
-  'iAWriterQuattroS-Regular.ttf': regular,
-  'iAWriterQuattroS-Bold.ttf': bold,
-  'iAWriterQuattroS-Italic.ttf': italic,
-  'iAWriterMonoS-Regular.ttf': mono,
-}));
+const vfs: Record<string, string> = {
+  'iAWriterQuattroS-Regular.ttf': stripPrefix(quattroRegular),
+  'iAWriterQuattroS-Bold.ttf': stripPrefix(quattroBold),
+  'iAWriterQuattroS-Italic.ttf': stripPrefix(quattroItalic),
+  'iAWriterMonoS-Regular.ttf': stripPrefix(monoRegular),
+};
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
@@ -146,14 +138,13 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
   };
 }
 
-window.addEventListener('message', async (event) => {
+window.addEventListener('message', (event) => {
   if (event.origin !== ALLOWED_ORIGIN) return;
   const { type, filename, markdown } = (event.data ?? {}) as { type: string; filename: string; markdown: string };
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
 
   const source = event.source;
   const origin = event.origin;
-  const vfs = await vfsPromise;
 
   pdfMake.createPdf(markdownToDocDef(filename, markdown), undefined, FONT_DICT, vfs)
     .download(filename.replace(/\.md$/, '.pdf'), () => {
