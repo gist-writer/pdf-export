@@ -116,6 +116,32 @@ function flushCodeBlock(content: any[], codeLines: string[]): void {
   });
 }
 
+// Renders a blockquote with a 3pt left border in the brand border colour.
+function makeBlockquote(inlineNodes: InlineNode[]): any {
+  return {
+    table: {
+      widths: [3, '*'],
+      body: [[
+        {
+          text: '',
+          border: [false, false, false, false],
+          fillColor: '#e0ddd8',
+          margin: [0, 0, 0, 0],
+        },
+        {
+          text: inlineNodes,
+          italics: true,
+          color: '#555555',
+          border: [false, false, false, false],
+          margin: [8, 2, 0, 2],
+        },
+      ]],
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 6],
+  };
+}
+
 function markdownToDocDef(filename: string, markdown: string): TDocumentDefinitions {
   const lines = markdown.split('\n');
   const content: any[] = [];
@@ -197,7 +223,7 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
 
     // --- Blockquote ---
     } else if (line.startsWith('> ')) {
-      content.push({ text: parseInline(stripLinks(line.slice(2))), italics: true, color: '#555555', margin: [12, 0, 0, 6] });
+      content.push(makeBlockquote(parseInline(stripLinks(line.slice(2)))));
 
     // --- Blank line — paragraph spacer ---
     } else if (line.trim() === '') {
