@@ -21,6 +21,35 @@ The iframe receives it, converts markdown to a pdfmake document definition, and 
 
 ---
 
+## Image support
+
+Images on their own line are fetched and embedded as base64 at export time:
+
+```md
+![a bike](https://imgur.com/bike.jpg)
+```
+
+Renders as a full-width image (`width: 435`) in the PDF. If the fetch fails for any reason, the image is replaced with italic alt text — the PDF always exports.
+
+### Fetch strategy
+
+The iframe fetches images directly using a tiered fallback:
+
+1. **Direct fetch** — works for any host that sends `Access-Control-Allow-Origin: *` (Imgur, GitHub raw, most CDNs)
+2. **`allorigins.win` proxy** — fallback for CORS-blocked hosts
+3. **`corsproxy.org` proxy** — second fallback
+4. **Italic alt text** — if all attempts fail
+
+Each attempt has a hard timeout (`2s` direct, `3s` per proxy). Worst case for a fully CORS-blocked image with both proxies down: ~8s before falling back to alt text.
+
+### Scope
+
+- Block-level images only — `![alt](url)` must be on its own line
+- Inline images (`some text ![x](url) more text`) are not supported
+- Images are capped at `width: 435` (full text column width)
+
+---
+
 ## Font setup
 
 Fonts are embedded at **build time** using Vite's `?inline` import — the full TTF is base64-encoded and baked directly into the JS bundle. No runtime fetching, no network dependency.
