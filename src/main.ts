@@ -9,22 +9,23 @@ import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-// Load font files as ArrayBuffers and convert to base64 for pdfmake vfs.
-async function loadFonts(): Promise<void> {
-  async function toBase64(url: string): Promise<string> {
-    const res = await fetch(url);
-    const buf = await res.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }
+// pdfmake vfs expects raw binary strings (not base64).
+async function toBinaryString(url: string): Promise<string> {
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return binary;
+}
 
+// Load font files and register with pdfmake vfs.
+async function loadFonts(): Promise<void> {
   const [regular, bold, italic, mono] = await Promise.all([
-    toBase64(quattroRegularUrl),
-    toBase64(quattroBoldUrl),
-    toBase64(quattroItalicUrl),
-    toBase64(monoRegularUrl),
+    toBinaryString(quattroRegularUrl),
+    toBinaryString(quattroBoldUrl),
+    toBinaryString(quattroItalicUrl),
+    toBinaryString(monoRegularUrl),
   ]);
 
   pdfMake.vfs = {
