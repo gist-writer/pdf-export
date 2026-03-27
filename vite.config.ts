@@ -4,7 +4,8 @@ import fs from 'fs';
 function ttfBase64Plugin(): Plugin {
   return {
     name: 'ttf-base64',
-    transform(_code, id) {
+    enforce: 'pre',
+    load(id) {
       if (!id.endsWith('.ttf')) return null;
       const buf = fs.readFileSync(id);
       const b64 = buf.toString('base64');
