@@ -9,23 +9,30 @@ import monoRegularUrl from './fonts/iAWriterMonoS-Regular.ttf?url';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
-// pdfmake vfs expects raw binary strings (not base64).
-async function toBinaryString(url: string): Promise<string> {
-  const res = await fetch(url);
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return binary;
+// Fetch a font file and return it as a base64 string via FileReader.
+// pdfmake/pdfkit requires base64-encoded font data in its vfs.
+function fetchFontAsBase64(url: string): Promise<string> {
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        // dataUrl is "data:font/ttf;base64,<data>" — strip the prefix.
+        resolve(dataUrl.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    }));
 }
 
 // Load font files and register with pdfmake vfs.
 async function loadFonts(): Promise<void> {
   const [regular, bold, italic, mono] = await Promise.all([
-    toBinaryString(quattroRegularUrl),
-    toBinaryString(quattroBoldUrl),
-    toBinaryString(quattroItalicUrl),
-    toBinaryString(monoRegularUrl),
+    fetchFontAsBase64(quattroRegularUrl),
+    fetchFontAsBase64(quattroBoldUrl),
+    fetchFontAsBase64(quattroItalicUrl),
+    fetchFontAsBase64(monoRegularUrl),
   ]);
 
   pdfMake.vfs = {
