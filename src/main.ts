@@ -120,7 +120,7 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
 
   const flushList = () => {
     if (!pendingList) return;
-    content.push({ [pendingList.type]: pendingList.items, margin: [0,0,0,6] });
+    content.push({ [pendingList.type]: pendingList.items, margin: [0,0,0,6] } as Content);
     pendingList = null;
   };
 
