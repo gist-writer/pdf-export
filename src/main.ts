@@ -167,7 +167,7 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
     if (/^\d+\. /.test(line)) {
       if (pendingList?.type !== 'ol') {
         flushList();
-        pendingList = { type: 'ol', items: [] }
+        pendingList = { type: 'ol', items: [] };
       }
       pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^\d+\.\s+/, ''))) });
       continue;
@@ -241,18 +241,13 @@ function runExport(
   filename: string,
   markdown: string,
 ): void {
-  const docDef = markdownToDocDdf(filename, markdown);
+  const docDef = markdownToDocDef(filename, markdown);
   pdfMake.createPdf(docDef).download(filename.replace(/\.md$/, '.pdf'), () => {
     source?.postMessage(
       { type: 'EXPORT_PDF_DONE' },
       { targetOrigin: origin },
     );
   });
-}
-
-// Typo-safe alias
-function markdownToDocDdf(filename: string, markdown: string): TDocumentDefinitions {
-  return markdownToDocDef(filename, markdown);
 }
 
 window.addEventListener('message', (event) => {
