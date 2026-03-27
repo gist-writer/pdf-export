@@ -8,6 +8,8 @@ import monoRegular from './fonts/iAWriterMonoS-Regular.ttf?inline';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
+let pdfPending = false;
+
 const FONT_DICT: TFontDictionary = {
   iAWriterQuattro: {
     normal: 'iAWriterQuattroS-Regular.ttf',
@@ -90,6 +92,12 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
     }
     if (inCode) { codeLines.push(line); continue; }
 
+    // Image lines — detected before stripLinks runs. T3 replaces this placeholder.
+    if (/^!\[.*\]\(.*\)$/.test(line.trim())) {
+      content.push({ text: line.trim() });
+      continue;
+    }
+
     if (/^[\-\*\+] /.test(line)) {
       if (pendingList?.type !== 'ul') { flushList(); pendingList = { type: 'ul', items: [] }; }
       pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
@@ -137,11 +145,15 @@ window.addEventListener('message', (event) => {
   const { type, filename, markdown } = (event.data ?? {}) as { type: string; filename: string; markdown: string };
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
 
+  if (pdfPending) return;
+  pdfPending = true;
+
   const source = event.source;
   const origin = event.origin;
 
   pdfMake.createPdf(markdownToDocDef(filename, markdown), undefined, FONT_DICT, vfs)
     .download(filename.replace(/\.md$/, '.pdf'), () => {
+      pdfPending = false;
       source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
     });
 });
