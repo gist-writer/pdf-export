@@ -104,7 +104,7 @@ function makeBlockquote(nodes: InlineNode[]): any {
   };
 }
 
-function markdownToDocDef(filename: string, markdown: string): TDocumentDefinitions {
+async function markdownToDocDef(filename: string, markdown: string): Promise<TDocumentDefinitions> {
   const lines = markdown.split('\n');
   const content: any[] = [];
   let inCode = false;
@@ -126,9 +126,16 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
     }
     if (inCode) { codeLines.push(line); continue; }
 
-    // Image lines — detected before stripLinks runs. T3 replaces this placeholder.
-    if (/^!\[.*\]\(.*\)$/.test(line.trim())) {
-      content.push({ text: line.trim() });
+    // Image lines — detected before stripLinks runs
+    const imgMatch = line.trim().match(/^!\[(.*)\]\((.+)\)$/);
+    if (imgMatch) {
+      const [, alt, url] = imgMatch;
+      const dataUri = await fetchImageAsBase64(url);
+      if (dataUri) {
+        content.push({ image: dataUri, width: 435 });
+      } else {
+        content.push({ text: alt || url, italics: true });
+      }
       continue;
     }
 
@@ -174,7 +181,7 @@ function markdownToDocDef(filename: string, markdown: string): TDocumentDefiniti
   };
 }
 
-window.addEventListener('message', (event) => {
+window.addEventListener('message', async (event) => {
   if (event.origin !== ALLOWED_ORIGIN) return;
   const { type, filename, markdown } = (event.data ?? {}) as { type: string; filename: string; markdown: string };
   if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
@@ -185,9 +192,13 @@ window.addEventListener('message', (event) => {
   const source = event.source;
   const origin = event.origin;
 
-  pdfMake.createPdf(markdownToDocDef(filename, markdown), undefined, FONT_DICT, vfs)
-    .download(filename.replace(/\.md$/, '.pdf'), () => {
-      pdfPending = false;
-      source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
-    });
+  try {
+    const docDef = await markdownToDocDef(filename, markdown);
+    pdfMake.createPdf(docDef, undefined, FONT_DICT, vfs)
+      .download(filename.replace(/\.md$/, '.pdf'), () => {
+        source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
+      });
+  } finally {
+    pdfPending = false;
+  }
 });
