@@ -1,10 +1,10 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import type { TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
 
-import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
-import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf?inline';
-import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf?inline';
-import monoRegular from './fonts/iAWriterMonoS-Regular.ttf?inline';
+import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf';
+import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf';
+import quattroItalic from './fonts/iAWriterQuattroS-Italic.ttf';
+import monoRegular from './fonts/iAWriterMonoS-Regular.ttf';
 
 const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
 
@@ -23,17 +23,11 @@ const FONT_DICT: TFontDictionary = {
   },
 };
 
-// Strip the data URI prefix — pdfmake vfs wants raw base64
-function stripPrefix(dataUri: string): string {
-  const idx = dataUri.indexOf(',');
-  return idx >= 0 ? dataUri.slice(idx + 1) : dataUri;
-}
-
 const vfs: Record<string, string> = {
-  'iAWriterQuattroS-Regular.ttf': stripPrefix(quattroRegular),
-  'iAWriterQuattroS-Bold.ttf': stripPrefix(quattroBold),
-  'iAWriterQuattroS-Italic.ttf': stripPrefix(quattroItalic),
-  'iAWriterMonoS-Regular.ttf': stripPrefix(monoRegular),
+  'iAWriterQuattroS-Regular.ttf': quattroRegular,
+  'iAWriterQuattroS-Bold.ttf': quattroBold,
+  'iAWriterQuattroS-Italic.ttf': quattroItalic,
+  'iAWriterMonoS-Regular.ttf': monoRegular,
 };
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
