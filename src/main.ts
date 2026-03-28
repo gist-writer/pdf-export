@@ -116,16 +116,20 @@ function isExportPdfMessage(data: unknown): data is ExportPdfMessage {
   );
 }
 
+const UL_RE = /^[-*+]\s/;
+const OL_RE = /^\d+\.\s/;
+
 export function parseInline(raw: string): InlineNode[] {
   const nodes: InlineNode[] = [];
-  const re = /`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*/g;
+  const re = /`([^`]+)`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*/g;
   let last = 0,
     m: RegExpExecArray | null;
   while ((m = re.exec(raw)) !== null) {
     if (m.index > last) nodes.push({ text: raw.slice(last, m.index) });
     if (m[1] !== undefined) nodes.push({ text: m[1], font: 'iAWriterMono' });
-    else if (m[2] !== undefined) nodes.push({ text: m[2], bold: true });
-    else if (m[3] !== undefined) nodes.push({ text: m[3], italics: true });
+    else if (m[2] !== undefined) nodes.push({ text: m[2], bold: true, italics: true });
+    else if (m[3] !== undefined) nodes.push({ text: m[3], bold: true });
+    else if (m[4] !== undefined) nodes.push({ text: m[4], italics: true });
     last = m.index + m[0].length;
   }
   if (last < raw.length) nodes.push({ text: raw.slice(last) });
@@ -232,15 +236,15 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
       continue;
     }
 
-    if (/^[\-\*\+] /.test(line)) {
+    if (UL_RE.test(line)) {
       if (pendingList?.type !== 'ul') {
         flushList();
         pendingList = { type: 'ul', items: [] };
       }
-      pendingList.items.push({ text: parseInline(stripLinks(line.slice(2))) });
+      pendingList.items.push({ text: parseInline(stripLinks(line.replace(/^[-*+]\s+/, ''))) });
       continue;
     }
-    if (/^\d+\. /.test(line)) {
+    if (OL_RE.test(line)) {
       if (pendingList?.type !== 'ol') {
         flushList();
         pendingList = { type: 'ol', items: [] };
@@ -250,19 +254,11 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
     }
     flushList();
 
-    if (line.startsWith('###### '))
-      content.push({ text: parseInline(stripLinks(line.slice(7))), style: 'h6' });
-    else if (line.startsWith('##### '))
-      content.push({ text: parseInline(stripLinks(line.slice(6))), style: 'h5' });
-    else if (line.startsWith('#### '))
-      content.push({ text: parseInline(stripLinks(line.slice(5))), style: 'h4' });
-    else if (line.startsWith('### '))
-      content.push({ text: parseInline(stripLinks(line.slice(4))), style: 'h3' });
-    else if (line.startsWith('## '))
-      content.push({ text: parseInline(stripLinks(line.slice(3))), style: 'h2' });
-    else if (line.startsWith('# '))
-      content.push({ text: parseInline(stripLinks(line.slice(2))), style: 'h1' });
-    else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim()))
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      content.push({ text: parseInline(stripLinks(headingMatch[2])), style: `h${level}` });
+    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim()))
       content.push({
         canvas: [
           {

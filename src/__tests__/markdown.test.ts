@@ -29,6 +29,14 @@ describe('parseInline', () => {
       { text: ' text' },
     ]);
   });
+
+  it('parses bold+italic (***)', () => {
+    expect(parseInline('this is ***both*** here')).toEqual([
+      { text: 'this is ' },
+      { text: 'both', bold: true, italics: true },
+      { text: ' here' },
+    ]);
+  });
 });
 
 describe('stripLinks', () => {
