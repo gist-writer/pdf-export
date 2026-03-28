@@ -5,6 +5,7 @@ git pull
 
 LATEST=$(git tag --sort=-v:refname | head -1)
 if [ -z "$LATEST" ]; then
+  # If no tags exist yet, default to v0.0.0 — first deploy will produce v0.0.1
   LATEST="v0.0.0"
 fi
 VERSION=${LATEST#v}
@@ -12,14 +13,6 @@ VERSION=${LATEST#v}
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
 PATCH=$((PATCH + 1))
-if [ "$PATCH" -ge 10 ]; then
-  PATCH=0
-  MINOR=$((MINOR + 1))
-fi
-if [ "$MINOR" -ge 10 ]; then
-  MINOR=0
-  MAJOR=$((MAJOR + 1))
-fi
 
 NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -27,7 +20,7 @@ NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 echo "$LATEST -> $NEW_TAG"
 
 # Bump package.json version
-sed -i '' "s/\"version\": \".*\"/\"version\": \"${NEW_VERSION}\"/" package.json
+npm version "$NEW_VERSION" --no-git-tag-version
 git add package.json
 git commit -m "chore: bump version to $NEW_TAG"
 git push

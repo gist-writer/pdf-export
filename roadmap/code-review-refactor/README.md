@@ -63,12 +63,12 @@ npm install -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser
 
 | File | Scope | Status |
 | :--- | :---- | :----- |
-| [t1.md](./t1.md) | Critical error handling — silent failures + pdfPending deadlock | `planned` |
-| [t2.md](./t2.md) | Testing foundation + dead code removal | `planned` |
-| [t3.md](./t3.md) | Deploy script fixes + linting/formatting setup | `planned` |
-| [t4.md](./t4.md) | Type safety — proper pdfmake types + message validation | `planned` |
-| [t5.md](./t5.md) | Parser refactor — headings, lists, inline markup | `planned` |
-| [t6.md](./t6.md) | Module split + architecture cleanup | `planned` |
+| [t1.md](./t1.md) | Critical error handling — silent failures + pdfPending deadlock | `done` |
+| [t2.md](./t2.md) | Testing foundation + dead code removal | `done` |
+| [t3.md](./t3.md) | Deploy script fixes + linting/formatting setup | `done` |
+| [t4.md](./t4.md) | Type safety — proper pdfmake types + message validation | `done` |
+| [t5.md](./t5.md) | Parser refactor — headings, lists, inline markup | `done` |
+| [t6.md](./t6.md) | Module split + architecture cleanup | `done` |
 
 ## Things to Know
 
