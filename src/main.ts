@@ -88,7 +88,7 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
 type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
 
-function parseInline(raw: string): InlineNode[] {
+export function parseInline(raw: string): InlineNode[] {
   const nodes: InlineNode[] = [];
   const re = /`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*/g;
   let last = 0, m: RegExpExecArray | null;
@@ -103,7 +103,7 @@ function parseInline(raw: string): InlineNode[] {
   return nodes.length > 0 ? nodes : [{ text: raw }];
 }
 
-function stripLinks(raw: string): string {
+export function stripLinks(raw: string): string {
   return raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
 }
 
