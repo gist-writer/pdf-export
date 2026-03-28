@@ -1,5 +1,11 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import type { Content, TDocumentDefinitions, TFontDictionary } from 'pdfmake/interfaces';
+import type {
+  Content,
+  ContentOrderedList,
+  ContentUnorderedList,
+  TDocumentDefinitions,
+  TFontDictionary,
+} from 'pdfmake/interfaces';
 
 import quattroRegular from './fonts/iAWriterQuattroS-Regular.ttf?inline';
 import quattroBold from './fonts/iAWriterQuattroS-Bold.ttf?inline';
@@ -84,7 +90,31 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   return null;
 }
 
-type InlineNode = { text: string; bold?: boolean; italics?: boolean; font?: string };
+interface InlineNode {
+  text: string;
+  bold?: boolean;
+  italics?: boolean;
+  font?: string;
+}
+
+interface ExportPdfMessage {
+  type: 'EXPORT_PDF';
+  filename: string;
+  markdown: string;
+}
+
+function isExportPdfMessage(data: unknown): data is ExportPdfMessage {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    (data as Record<string, unknown>).type === 'EXPORT_PDF' &&
+    typeof (data as Record<string, unknown>).filename === 'string' &&
+    typeof (data as Record<string, unknown>).markdown === 'string' &&
+    (data as Record<string, unknown>).filename !== '' &&
+    (data as Record<string, unknown>).markdown !== ''
+  );
+}
 
 export function parseInline(raw: string): InlineNode[] {
   const nodes: InlineNode[] = [];
@@ -164,10 +194,11 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
 
   const flushList = () => {
     if (!pendingList) return;
-    content.push({
-      [pendingList.type]: pendingList.items,
-      margin: [0, 0, 0, 6],
-    } as unknown as Content);
+    if (pendingList.type === 'ul') {
+      content.push({ ul: pendingList.items, margin: [0, 0, 0, 6] } as ContentUnorderedList);
+    } else {
+      content.push({ ol: pendingList.items, margin: [0, 0, 0, 6] } as ContentOrderedList);
+    }
     pendingList = null;
   };
 
@@ -272,12 +303,8 @@ async function markdownToDocDef(filename: string, markdown: string): Promise<TDo
 
 window.addEventListener('message', async (event) => {
   if (event.origin !== ALLOWED_ORIGIN) return;
-  const { type, filename, markdown } = (event.data ?? {}) as {
-    type: string;
-    filename: string;
-    markdown: string;
-  };
-  if (type !== 'EXPORT_PDF' || !filename || !markdown) return;
+  if (!isExportPdfMessage(event.data)) return;
+  const { filename, markdown } = event.data;
 
   if (pdfPending) return;
   pdfPending = true;
