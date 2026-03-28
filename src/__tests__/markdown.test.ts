@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInline, stripLinks } from '../main';
+import { parseInline, stripLinks } from '../markdown/parser';
 
 describe('parseInline', () => {
   it('parses plain text', () => {
