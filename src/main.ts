@@ -11,6 +11,25 @@ const CONTENT_WIDTH = 435;
 
 let pdfPending = false;
 
+function downloadPdf(
+  docDef: TDocumentDefinitions,
+  filename: string,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('PDF download timed out')), 30_000);
+    try {
+      pdfMake.createPdf(docDef, undefined, FONT_DICT, vfs)
+        .download(filename.replace(/\.md$/, '.pdf'), () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+    } catch (err) {
+      clearTimeout(timeout);
+      reject(err);
+    }
+  });
+}
+
 const CORS_PROXIES = [
   'https://api.allorigins.win/raw?url=',
   'https://corsproxy.org/?',
@@ -201,12 +220,15 @@ window.addEventListener('message', async (event) => {
 
   try {
     const docDef = await markdownToDocDef(filename, markdown);
-    pdfMake.createPdf(docDef, undefined, FONT_DICT, vfs)
-      .download(filename.replace(/\.md$/, '.pdf'), () => {
-        pdfPending = false;
-        source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
-      });
-  } catch {
+    await downloadPdf(docDef, filename);
+    source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
+  } catch (err) {
+    console.error('[pdf-export] generation failed:', err);
+    source?.postMessage(
+      { type: 'EXPORT_PDF_ERROR', error: String(err) },
+      { targetOrigin: origin },
+    );
+  } finally {
     pdfPending = false;
   }
 });
