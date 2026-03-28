@@ -5,17 +5,28 @@ import { markdownToDocDef } from './markdown/parser';
 
 export function downloadPdf(docDef: TDocumentDefinitions, filename: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('PDF download timed out')), 30_000);
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error('PDF download timed out'));
+      }
+    }, 30_000);
     try {
-      pdfMake
-        .createPdf(docDef, undefined, FONT_DICT, vfs)
+      pdfMake.createPdf(docDef, undefined, FONT_DICT, vfs)
         .download(filename.replace(/\.md$/, '.pdf'), () => {
-          clearTimeout(timeout);
-          resolve();
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          }
         });
     } catch (err) {
-      clearTimeout(timeout);
-      reject(err);
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeout);
+        reject(err);
+      }
     }
   });
 }

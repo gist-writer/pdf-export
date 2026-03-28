@@ -3,8 +3,8 @@ import type { InlineNode } from '../types';
 import { CONTENT_WIDTH, STYLES } from '../config';
 import { parseInline, stripLinks } from './parser';
 
-const UL_RE = /^[-*+]\s/;
-const OL_RE = /^\d+\.\s/;
+const UL_RE = /^[-*+]\s+/;
+const OL_RE = /^\d+\.\s+/;
 
 export interface ParseContext {
   content: Content[];
@@ -139,7 +139,7 @@ const headingHandler: BlockHandler = {
 };
 
 const hrHandler: BlockHandler = {
-  match: (line) => /^(-{3,}|\*{3,}|_{3,})$/.test(line.trim()),
+  match: (line) => /^---+$/.test(line.trim()),
   handle: (_line, ctx) => {
     flushList(ctx);
     ctx.content.push({

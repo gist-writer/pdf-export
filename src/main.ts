@@ -16,6 +16,8 @@ window.addEventListener('message', async (event) => {
 
   try {
     await createPdf(filename, markdown);
+    // event.source is null when the page is opened directly (not in an iframe).
+    // In that case, postMessage silently no-ops via optional chaining — this is expected.
     source?.postMessage({ type: 'EXPORT_PDF_DONE' }, { targetOrigin: origin });
   } catch (err) {
     console.error('[pdf-export] generation failed:', err);

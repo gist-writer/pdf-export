@@ -1,4 +1,4 @@
-export const ALLOWED_ORIGIN = 'https://gist-writer.github.io';
+export const ALLOWED_ORIGIN = import.meta.env.VITE_ALLOWED_ORIGIN ?? 'https://gist.github.com';
 
 export const CONTENT_WIDTH = 435;
 

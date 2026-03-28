@@ -29,8 +29,7 @@ export async function fetchImageAsBase64(url: string): Promise<string | null> {
       if (!res.ok) continue;
       const blob = await res.blob();
       if (!blob.type.startsWith('image/')) continue;
-      const b64 = await blobToBase64(blob);
-      return `data:${blob.type};base64,${b64.split(',')[1]}`;
+      return await blobToBase64(blob);
     } catch {
       continue;
     }

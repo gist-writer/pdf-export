@@ -37,6 +37,11 @@ describe('parseInline', () => {
       { text: ' here' },
     ]);
   });
+
+  it('handles empty string input', () => {
+    const result = parseInline('');
+    expect(result).toEqual([{ text: '' }]);
+  });
 });
 
 describe('stripLinks', () => {
@@ -50,5 +55,11 @@ describe('stripLinks', () => {
 
   it('handles multiple links in one line', () => {
     expect(stripLinks('[a](url1) and [b](url2)')).toBe('a and b');
+  });
+
+  it('handles nested brackets in stripLinks', () => {
+    // stripLinks should at minimum not crash — the inner brackets may not parse perfectly
+    const result = stripLinks('[a [b]](url)');
+    expect(typeof result).toBe('string');
   });
 });

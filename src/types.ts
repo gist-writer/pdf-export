@@ -12,14 +12,13 @@ export interface ExportPdfMessage {
 }
 
 export function isExportPdfMessage(data: unknown): data is ExportPdfMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Record<string, unknown>;
   return (
-    typeof data === 'object' &&
-    data !== null &&
-    'type' in data &&
-    (data as Record<string, unknown>).type === 'EXPORT_PDF' &&
-    typeof (data as Record<string, unknown>).filename === 'string' &&
-    typeof (data as Record<string, unknown>).markdown === 'string' &&
-    (data as Record<string, unknown>).filename !== '' &&
-    (data as Record<string, unknown>).markdown !== ''
+    d.type === 'EXPORT_PDF' &&
+    typeof d.filename === 'string' &&
+    typeof d.markdown === 'string' &&
+    d.filename !== '' &&
+    d.markdown !== ''
   );
 }

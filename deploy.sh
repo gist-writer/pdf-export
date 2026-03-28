@@ -5,6 +5,7 @@ git pull
 
 LATEST=$(git tag --sort=-v:refname | head -1)
 if [ -z "$LATEST" ]; then
+  # If no tags exist yet, default to v0.0.0 — first deploy will produce v0.0.1
   LATEST="v0.0.0"
 fi
 VERSION=${LATEST#v}
